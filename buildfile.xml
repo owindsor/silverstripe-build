@@ -1,69 +1,56 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!-- Rename this project to something relevant! -->
+<project name="rename-me" default="build">
+  <tstamp>
+    <format property="FULLDTIME" pattern="%Y%m%d%H%M%S" />
+  </tstamp>
+  <!-- Make sure properties are in existence -->
+  <available file="${project.basedir}/build/build.properties" property="properties_exist" />
+  <!-- Has the modules file been created? -->
+  <available file="${modules.depends.file}" property="modules_file_exists" />
+  <!-- have we been installed? -->
+  <available file="${project.basedir}/mysite/local.conf.php" property="installed" />
+  <!-- we need this first so that it's set BEFORE the properties file is read -->
+  <if>
+    <isset property="env.GIT_BRANCH" />
+    <then>
+      <property name="git.branch" value="${env.GIT_BRANCH}" />
+    </then>
+  </if>
+  <!-- if it's been set from environment, lets clean it up a little bit -->
+  <if>
+    <isset property="git.branch" />
+    <then>
+      <php expression="str_replace('origin/','', '${git.branch}')" returnProperty="git.branch" />
+    </then>
+  </if>
+  <echo>${git.branch}</echo>
+  <property file="${project.basedir}/build/build.properties" />
+  <php expression="trim(file_get_contents('${module.name}/VERSION'))" returnProperty="module.version" />
+  <if>
+    <isset property="env.BUILD_NUMBER" />
+    <then>
+      <property name="BUILD_STAMP" value="${env.BUILD_NUMBER}" />
+    </then>
+    <else>
+      <property name="BUILD_STAMP" value="${DSTAMP}" />
+    </else>
+  </if>
+  <echo>Creating build ${BUILD_STAMP}</echo>
+  <!-- Load in the custom tasks -->
+  <taskdef name="symlink" classname="build.SymlinkTask" classpath="${project.basedir}" />
+  <taskdef name="copyfolders" classname="build.CopyFoldersTask" classpath="${project.basedir}" />
+  <taskdef name="sstest" classname="build.SilverStripeTestTask" classpath="${project.basedir}" />
+  <taskdef name="ssmodules" classname="build.LoadModulesTask" classpath="${project.basedir}" />
+  <taskdef name="sspatches" classname="build.ApplyPatchesTask" classpath="${project.basedir}" />
+  <taskdef name="ssdeploy" classname="build.SilverStripeDeployTask" classpath="${project.basedir}" />
 
-<project>
 
-	<tstamp>
-		<format property="FULLDTIME" pattern="%Y%m%d%H%M%S" />
-	</tstamp>
-
-	<!-- Make sure properties are in existence -->
-	<available file="${project.basedir}/build/build.properties" property="properties_exist" />
-
-	<!-- Has the modules file been created? -->
-	<available file="${modules.depends.file}" property="modules_file_exists" />
-
-	<!-- have we been installed? -->
-	<available file="${project.basedir}/mysite/local.conf.php" property="installed" />
-
-	<!-- we need this first so that it's set BEFORE the properties file is read -->
-	<if>
-		<isset property="env.GIT_BRANCH" />
-		<then>
-			<property name="git.branch" value="${env.GIT_BRANCH}" />
-		</then>
-	</if>
-	<!-- if it's been set from environment, lets clean it up a little bit -->
-	<if>
-		<isset property="git.branch" />
-		<then>
-			<php expression="str_replace('origin/','', '${git.branch}')" returnProperty="git.branch"/>
-		</then>
-	</if>
-
-	<echo>${git.branch}</echo>
-
-	<property file="${project.basedir}/build/build.properties"></property>
-
-	<php expression="trim(file_get_contents('${module.name}/VERSION'))" returnProperty="module.version" />
-
-	<if>
-		<isset property="env.BUILD_NUMBER" />
-		<then>
-			<property name="BUILD_STAMP" value="${env.BUILD_NUMBER}" />
-		</then>
-		<else>
-			<property name="BUILD_STAMP" value="${DSTAMP}" />
-		</else>
-	</if>
-
-	<echo>Creating build ${BUILD_STAMP}</echo>
-
-	<!-- Load in the custom tasks -->
-	<taskdef name="symlink" classname="build.SymlinkTask" classpath="${project.basedir}" />
-	<taskdef name="copyfolders" classname="build.CopyFoldersTask" classpath="${project.basedir}" />
-	<taskdef name="sstest" classname="build.SilverStripeTestTask" classpath="${project.basedir}" />
-	<taskdef name="ssmodules" classname="build.LoadModulesTask" classpath="${project.basedir}" />
-	<taskdef name="sspatches" classname="build.ApplyPatchesTask" classpath="${project.basedir}" />
-	
-	<taskdef name="ssdeploy" classname="build.SilverStripeDeployTask" classpath="${project.basedir}" />
-
-	<target name="help">
-		<echo>
-
-SilverStripe Australia Project Build
+  <target name="help">
+    <echo>SilverStripe Australia Project Build
 ------------------------------------
 
-This build file contains targets to assist in creating new SilverStripe project builds. 
+This build file contains targets to assist in creating new SilverStripe project builds.
 
 * Delete the .git directory! You'll eventually add this project to a new location, meaning it is unnecessary to keep the existing git info
 * Edit this build file and change the project name from rename-me to something more accurate
@@ -86,398 +73,803 @@ Important targets
 
 Other features
 
-* In some cases you will want to provide custom patches to dependent modules. As these can't be committed back to this project's repository, 
-  a mechanism exists to include just the .patch diffs. Drop any diffs into build/patches, and these will be applied during the build target. 
+* In some cases you will want to provide custom patches to dependent modules. As these can't be committed back to this project's repository,
+  a mechanism exists to include just the .patch diffs. Drop any diffs into build/patches, and these will be applied during the build target.</echo>
+  </target>
 
-		</echo>
-	</target>
+<!-- ### Verify code consistency
+Make sure that our code is clean and functional. -->
+  <target name="verify" depends="init,clean,lint-php,lint-js,lint-css,check-php-debug,check-js-debug" description="Verify clean,  consistent and styled code" />
 
-	<target name="init" depends="non_interactive,check_properties">
-		<mkdir dir="${build.output.dir}" />
-	</target>
+<!-- ### Analyze code
+Perform static analysis of the code -->
+  <target name="analyze" depends="init,clean,phploc,phpmd,phpcpd" description="Static Analysis of code" />
 
-	<!-- Load modules where sensitive dependency exists -->
-	<target name="update_modules" depends="create_modules_file">
-		<ssmodules file="${modules.depends.file}" noninteractive="${ni_build}"/>
-	</target>
 
-	<target name="update-composer">
-		<if>
-			<available file="composer.json" />
-			<then>
-				<if>
-					<not><available file="composer.phar" /></not>
-					<then>
-						<exec command="curl -s http://getcomposer.org/installer | php" passthru="true" />
-					</then>
-				</if>
+<!-- ### Generate documentation
+Generate HTML documentation and code browser for the project. -->
+  <target name="docs" depends="init,clean,phpdoc,phpcb" description="Build various code documentation (API, CodeBrowser etc" />
 
-				<if>
-					<available file="composer.lock" />
-					<then>
-						<exec command="php composer.phar update --prefer-source" passthru="true" />
-					</then>
-					<else>
-						<exec command="php composer.phar install --prefer-source" passthru="true" />
-					</else>
-				</if>
-				
-			</then>
-		</if>
-	</target>
+<!-- INIT -->
 
-	<target name="create_modules_file" unless="modules_file_exists">
-		<copy file="${modules.depends.file}.default" tofile="${modules.depends.file}" />
-	</target>
+  <target name="init" depends="non_interactive,check_properties,setup-filesets">
+    <mkdir dir="${build.output.dir}" />
+    <mkdir dir="${testing.artifacts}" />
+  </target>
 
-	<!--
-	Add a new module to the system. Run from the commandline, you can pass
-	in the details of the module as phing add_module -Dmodule=blog -Dmodurl=http://path/to/svn
-	-->
-	<target name="add_module">
-		<ssmodules name="${module}" url="${modurl}" />
-	</target>
+  <!-- Load modules where sensitive dependency exists -->
+  <target name="update_modules" depends="create_modules_file">
+    <ssmodules file="${modules.depends.file}" noninteractive="${ni_build}" />
+  </target>
 
-	<!-- Ensures the build.properties file exists! -->
-	<target name="check_properties" unless="properties_exist">
-		<!-- create a default file only if it doesn't exist --> 
-		<copy tofile="${project.basedir}/build/build.properties" file="${project.basedir}/build/build.properties.sample" />
-		<property file="${project.basedir}/build/build.properties"></property>
-		<!-- <fail>!!Please create the build/build.properties file before continuing!!</fail> -->
-	</target>
+  <!-- Check to see if there is a global composer install we can use -->
+  <target name="composer-binary" description="Check local composer install">
+    <condition property="composer.binary" value="false">
+      <or>
+        <available file="/usr/local/bin/composer" type="file" />
+        <available file="/usr/bin/composer" type="file" />
+        <available file="/opt/bin/composer" type="file" />
+      </or>
+    </condition>
+  </target>
 
-	<!-- A target that gets executed if the 'ni_build' parameter is set. This is done when
+  <target name="composer-json" description="Check composer.json is in the basedir">
+    <condition property="composer.json">
+      <available file="composer.json" />
+    </condition>
+  </target>
+
+  <target name="composer-lock" description="Check composer.lock is in the basedir">
+    <condition property="composer.lock">
+      <available file="composer.lock" />
+    </condition>
+  </target>
+
+  <!-- Update the composer deps -->
+  <target name="update-composer" depends="composer-binary,composer-json,composer-lock">
+    <if>
+      <and>
+        <not>
+          <isset property="composer.binary" />
+        </not>
+        <not>
+          <available file="composer.phar" />
+        </not>
+        <isset property="composer.json" />
+        <not>
+          <isset property="composer.lock" />
+        </not>
+      </and>
+      <then>
+        <echo msg="Installing composer.phar and installing dependencies" />
+        <exec command="curl -s http://getcomposer.org/installer | php ; ${project.basedir}/composer.phar --prefer-source install" passthru="true" />
+      </then>
+      <elseif>
+        <and>
+          <not>
+            <isset property="composer.binary" />
+          </not>
+          <available file="composer.phar" />
+          <isset property="composer.json" />
+          <not>
+            <isset property="composer.lock" />
+          </not>
+        </and>
+        <then>
+          <echo msg="Installing Composer dependencies from composer.json" />
+          <exec command="php ; ${project.basedir}/composer.phar --prefer-source install" passthru="true" />
+        </then>
+      </elseif>
+      <elseif>
+        <and>
+          <not>
+            <isset property="composer.binary" />
+          </not>
+          <not>
+            <available file="composer.phar" />
+          </not>
+          <isset property="composer.json" />
+          <isset property="composer.lock" />
+        </and>
+        <then>
+          <echo msg="Installing composer.phar and updating dependencies" />
+          <exec command="curl -s http://getcomposer.org/installer | php ; ${project.basedir}/composer.phar --prefer-source update" passthru="true" />
+        </then>
+      </elseif>
+      <elseif>
+        <and>
+          <isset property="composer.binary" />
+          <isset property="composer.json" />
+          <not>
+            <isset property="composer.lock" />
+          </not>
+        </and>
+        <then>
+          <echo msg="Installing dependencies using global composer" />
+          <exec command="composer -n --prefer-source install" passthru="true" />
+        </then>
+      </elseif>
+      <elseif>
+        <and>
+          <isset property="composer.binary" />
+          <isset property="composer.json" />
+          <isset property="composer.lock" />
+        </and>
+        <then>
+          <echo msg="updating dependencies using global composer" />
+          <exec command="composer -n --prefer-source update" passthru="true" />
+        </then>
+      </elseif>
+    </if>
+  </target>
+  <target name="create_modules_file" unless="modules_file_exists">
+    <copy file="${modules.depends.file}.default" tofile="${modules.depends.file}" />
+  </target>
+
+  <!-- Ensures the build.properties file exists! -->
+  <target name="check_properties" unless="properties_exist">
+    <!-- create a default file only if it doesn't exist -->
+    <copy tofile="${project.basedir}/build/build.properties" file="${project.basedir}/build/build.properties.sample" />
+    <property file="${project.basedir}/build/build.properties" />
+    <!-- <fail>!!Please create the build/build.properties file before continuing!!</fail> -->
+  </target>
+
+  <!-- A target that gets executed if the 'ni_build' parameter is set. This is done when
 	the build is executed from a CI container -->
-	<target name="non_interactive" if="ni_build">
-		<!-- we'll make sure that there's a build.properties file, even if we're just using the default  -->
-		<delete file="${project.basedir}/build/build.properties" />
-		<copy tofile="${project.basedir}/build/build.properties" file="${project.basedir}/build/build.properties.sample" />
-		<delete dir="assets" />
-		<delete file="${project.basedir}/mysite/local.conf.php" />
-		<delete file="${project.basedir}/mysite/_config/local.yml" />
-		<delete file="${project.basedir}/ssautesting/testing.conf.php" />
-		<property name="properties_exist" value="true" override="true" />
-		<property file="${project.basedir}/build/build.properties"></property>
-	</target>
+  <target name="non_interactive" if="ni_build">
+    <!-- we'll make sure that there's a build.properties file, even if we're just using the default  -->
+    <delete file="${project.basedir}/build/build.properties" />
+    <copy tofile="${project.basedir}/build/build.properties" file="${project.basedir}/build/build.properties.sample" />
+    <delete dir="assets" />
+    <delete file="${project.basedir}/mysite/local.conf.php" />
+    <delete file="${project.basedir}/mysite/_config/local.yml" />
+    <delete file="${project.basedir}/ssautesting/testing.conf.php" />
+    <property name="properties_exist" value="true" override="true" />
+    <property file="${project.basedir}/build/build.properties" />
+  </target>
 
-	<!-- Installs a freshly checked-out silverstripe project -->
-	<target name="build" depends="init">
-		<!-- if it doesn't exist, create it and the default .htaccess -->
-		<mkdir dir="assets" />
-		<echo file="assets/.htaccess" append="false">
-RemoveHandler .php .phtml .php3 .php4 .php5 .inc
-RemoveType .php .phtml .php3 .php4 .php5 .inc
-		</echo>
+  <!-- Installs a freshly checked-out silverstripe project -->
+  <target name="build" depends="init">
+    <!-- if it doesn't exist, create it and ensure the .assets-htaccess from mysite is used (same file used for deployments) -->
+    <mkdir dir="assets" />
+    <copy tofile="${project.basedir}/assets/.htaccess" file="${project.basedir}/mysite/.assets-htaccess" overwrite="true">
+      <filterchain>
+        <expandproperties />
+      </filterchain>
+    </copy>
+    <echo file="mysite/BUILD_NUMBER" append="false">Build ${BUILD_STAMP}</echo>
+    <!-- Copy the DB configs -->
+    <copy tofile="mysite/local.conf.php" file="${local.php.config}" overwrite="false">
+      <filterchain>
+        <expandproperties />
+      </filterchain>
+    </copy>
+    <copy tofile="mysite/_config/local.yml" file="${local.yml.config}" overwrite="false">
+      <filterchain>
+        <expandproperties />
+      </filterchain>
+    </copy>
+    <!-- Copy the configs to be used for testing. Set the required variables in the build.properties file -->
+    <copy tofile="ssautesting/testing.conf.php" file="${testing.config}" overwrite="false">
+      <filterchain>
+        <expandproperties />
+      </filterchain>
+    </copy>
+    <!-- Copy the htaccess -->
+    <copy tofile=".htaccess" file="${htaccess.config}" overwrite="true">
+      <filterchain>
+        <expandproperties />
+      </filterchain>
+    </copy>
+    <phingcall target="update-composer" />
+    <phingcall target="update_modules" />
+    <phingcall target="apply_patches" />
+    <!-- Trigger /dev/build for the new system -->
+    <exec command="php framework/cli-script.php dev/build" />
+  </target>
 
-		<echo file="mysite/BUILD_NUMBER" append="false">Build ${BUILD_STAMP}</echo>
+  <target name="apply_patches">
+    <mkdir dir="${patches.dir}" />
+    <sspatches patchdir="${patches.dir}" />
+  </target>
 
-		<!-- Copy the DB configs -->
-		<if>
-			<not>
-			<os family="windows" />
-			</not>
-			<then>
-				<echo>Touching configs if they exist</echo>
-				<exec command="touch --no-create mysite/local.conf.php" />
-				<exec command="touch --no-create mysite/_config/local.yml" />
-				<exec command="touch --no-create ssautesting/testing.conf.php" />
-				<exec command="touch --no-create .htaccess" />
-			</then>
-		</if>
-		<copy tofile="mysite/local.conf.php" file="${local.php.config}" overwrite="false">
-			<filterchain>
-				<expandproperties />
-			</filterchain>
-		</copy>
-		
-		<copy tofile="mysite/_config/local.yml" file="${local.yml.config}" overwrite="false">
-			<filterchain>
-				<expandproperties />
-			</filterchain>
-		</copy>
+  <!-- This is part of the initialization of the build. This target should only be
+called from `init` target. -->
+  <target name="setup-filesets"
+          depends="check_properties,non_interactive">
+    <!-- Define pattern sets for future reference -->
 
-		<!-- Copy the configs to be used for testing. Set the required variables in the build.properties file -->
-		<copy tofile="ssautesting/testing.conf.php" file="${testing.config}" overwrite="false">
-			<filterchain>
-				<expandproperties />
-			</filterchain>
-		</copy>
+    <!-- PHP files -->
+    <patternset id="php">
+      <include name="**/*.php" />
+      <include name="**/*.module" />
+      <include name="**/*.install" />
+      <include name="**/*.inc" />
+      <include name="**/*.profile" />
+      <include name="**/*.test" />
+    </patternset>
 
-		<!-- Copy the htaccess -->
-		<copy tofile=".htaccess" file="${htaccess.config}" overwrite="false">
-			<filterchain>
-				<expandproperties />
-			</filterchain>
-		</copy>
+    <!-- Javascript files -->
+    <patternset id="js">
+      <include name="**/*.js" />
+      <!-- Minimized JavaScript files should not be analyzed.
+           In their optimized state they can not be expexted
+           to conform to coding standards. -->
+      <exclude name="**/*.min.js" />
 
-		<phingcall target="update-composer" />
-		<phingcall target="update_modules" />
-		<phingcall target="apply_patches" />
+    </patternset>
 
-		<!-- Trigger /dev/build for the new system -->
-		<exec command="php framework/cli-script.php dev/build"></exec>
-	</target>
+    <!-- CSS files -->
+    <patternset id="css">
+      <include name="**/*.css" />
+    </patternset>
 
-	<target name="apply_patches">
-		<mkdir dir="${patches.dir}" />
-		<sspatches patchdir="${patches.dir}" />
-	</target>
-	
+    <!-- Directories for the core framework.
+         We don't want to inspect this on every build -->
+  <patternset id="core-framework">
+      <exclude name="**/framework/**/*.*" />
+      <exclude name="**/cms/**/*.*" />
+      <exclude name="**/sapphire/**/*.*" />
+      <exclude name="**/build/**/*.*" />
+      <exclude name="**/ssautesting/**/*.*" />
+  </patternset>
 
-	<!-- Create a deployable package to use as the base for installing a new site FROM SCRATCH. 
+    <!-- We exclude generated files from We exclude these from code analysis
+         as we cannot be held responsible for any problems here. -->
+    <patternset id="generated">
+      <exclude name="**/silverstripe-cache/**/*.**" />
+      <exclude name="**/vendor/**/*.**" />
+
+    </patternset>
+
+    <!-- Define file sets for future reference -->
+
+    <!-- PHP files -->
+    <fileset id="src.php" dir="${project.basedir}">
+      <patternset refid="php"/>
+      <patternset refid="core-framework"/>
+      <patternset refid="generated"/>
+    </fileset>
+
+    <!-- All Javascript files -->
+    <fileset id="src.js" dir="${project.basedir}">
+      <patternset refid="js" />
+      <patternset refid="core-framework" />
+    </fileset>
+
+    <!-- All CSS files -->
+    <fileset id="src.css" dir="${project.basedir}">
+      <patternset refid="css" />
+      <patternset refid="core-framework" />
+    </fileset>
+  </target>
+
+
+  <!-- VALIDATION LINTING AND OTHER PROCESSES -->
+
+  <!-- ### PHP linting -->
+
+  <target name="lint-php"
+          description="Check all PHP files for syntax errors using PHPLint"
+          depends="init">
+    <phplint haltonfailure="true">
+      <fileset refid="src.php" />
+    </phplint>
+  </target>
+
+  <!-- ### Javascript linting
+Checks JS against the JSHint spec - A little more reasonable and less rude than some other options -->
+  <target name="lint-js"
+          description="Check all Javascript files using jsHint"
+          depends="init">
+    <foreach target="jshint-file" param="filename" absparam="absfilename">
+      <fileset refid="src.js"/>
+    </foreach>
+  </target>
+
+<!-- #### jshint a file
+
+No need to run `init` or setup targets here. This target should only be called
+from parent `lint-js` targets. -->
+  <target name="jshint-file">
+    <echo>Linting file: ${absfilename}</echo>
+
+    <!-- Execute JSHint and return the result in checkstyle format-->
+    <exec command="${jshint.binary} --reporter=checkstyle ${absfilename}"
+          outputProperty="report" />
+
+    <!-- Print the result to a file.
+         Replace / with - in path to create legal filenames in the format
+         `checkstyle-jshint-dir1-dir2-file.js.xml`. -->
+    <php function="str_replace" returnProperty="filename.normalized">
+      <param value="/" />
+      <param value="-" />
+      <param value="${filename}" />
+    </php>
+    <delete file="${testing.artifacts}/checkstyle-jshint-${filename.normalized}.xml" />
+    <append text="${report}"  destFile="${testing.artifacts}/checkstyle-jshint-${filename.normalized}.xml" />
+  </target>
+
+<!-- ### CSS linting
+
+Checks code against [CSS Lint](http://www.csslint.net/) to help point out problems with CSS code. It does basic syntax checking as well as applying a set of rules to the code that look for problematic patterns or signs of inefficiency. -->
+  <target name="lint-css"
+          description="Check all CSS files using CSS Lint"
+          depends="init">
+    <foreach target="csslint-file" param="filename" absparam="absfilename">
+      <fileset refid="src.css"/>
+    </foreach>
+  </target>
+
+<!-- #### csslint a file
+
+No need to run `init` or setup targets here. This target should only be called
+from parent `lint-css` targets. -->
+  <target name="csslint-file">
+    <echo>Linting file: ${absfilename}</echo>
+
+    <!-- Run csslint through Rhino and return the result in
+         checkstyle format-->
+    <exec command="${csslint.binary}
+                   --format=checkstyle-xml ${absfilename}"
+          outputProperty="report" />
+
+    <!-- Print the result to a file.
+         Replace / with - in path to create legal filenames in the format
+         `checkstyle-csslint-dir1-dir2-file.css.xml`. -->
+    <php function="str_replace" returnProperty="filename.normalized">
+      <param value="/" />
+      <param value="-" />
+      <param value="${filename}" />
+    </php>
+
+    <property name="csslint.report.file" value="${testing.artifacts}/checkstyle-csslint-${filename.normalized}.xml" />
+    <delete file="${csslint.report.file}" />
+    <append text="${report}"  destFile="${csslint.report.file}" />
+
+
+    <!-- Cleanup the break rules property.
+         Hyphens are removed to support both input and output rule format.
+         csslint-rule becomes CsslintRule.
+         Seperators (Commas and multiple whitespace characters) are reduced
+         to a pipe to be used in a regular expression. -->
+         <php expression="str_replace('-', '', '${csslint.rules.break}')"
+              returnProperty="csslint.rules.break"/>
+         <php expression="preg_replace('/(\s+|\s*,\s*)/', '|', '${csslint.rules.break}')"
+              returnProperty="csslint.rules.break"/>
+
+    <!-- If any rules which require the build to break are defined then
+         look for them. -->
+    <if>
+      <not>
+        <equals arg1="${csslint.rules.break}" arg2="" />
+      </not>
+      <then>
+        <!-- CSS Lint reports checkstyle errors using the format
+             net.csslint.RuleName. Load all checkstyle reports and look for
+             errors with such a source from the provided rules. -->
+        <loadfile property="csslint.break.errors"
+                  file="${csslint.report.file}">
+          <filterchain>
+            <linecontainsregexp>
+                <regexp pattern="(net\.csslint\.(${csslint.rules.break}))"
+                        ignoreCase="true" />
+              </linecontainsregexp>
+          </filterchain>
+        </loadfile>
+
+        <!-- Break if any errors from the provided rules are detected! -->
+        <if>
+          <not>
+            <equals arg1="${csslint.break.errors}" arg2="" />
+          </not>
+          <then>
+            <fail message="CSS error detected in file ${absfilename}" />
+          </then>
+        </if>
+      </then>
+    </if>
+  </target>
+
+<!-- ### Debug code detection
+
+Code should not call functions which are usually used for debugging.
+This belongs on developer environments - not VCS. This goes for mentioning
+them in comments as well. -->
+  <target name="check-php-debug"
+          description="Check custom PHP code for debug statements"
+          depends="init">
+    <phingcall target="check-debug">
+      <property name="debug.language" value="PHP" override="true" />
+      <property name="debug.pattern" value="(var_dump\(|dsm\(|dpm\()"
+                override="true" />
+      <property name="debug.fileset" value="src.php"/>
+    </phingcall>
+  </target>
+
+  <target name="check-js-debug"
+          description="Check custom Javascript code for debug statements">
+    <phingcall target="check-debug">
+      <property name="debug.language" value="Javascript" override="true" />
+      <property name="debug.pattern" value="(console\.log\()" override="true" />
+      <property name="debug.fileset" value="src.js"/>
+    </phingcall>
+  </target>
+
+  <!-- #### Check a fileset for debug code -->
+  <target name="check-debug"
+          depends="init">
+    <php function="strtolower" returnProperty="debug.language.lower">
+      <param value="${debug.language}" />
+    </php>
+    <property name="debug.output"
+              value="${testing.artifacts}/debug_${debug.language.lower}.txt"
+              override="true" />
+    <delete file="${debug.output}"/>
+    <append text="" destFile="${debug.output}" />
+
+    <foreach target="check-debug-file" param="filename"
+             absparam="absfilename">
+      <fileset refid="${debug.fileset}"/>
+    </foreach>
+
+    <loadfile property="debug.lines" file="${debug.output}" />
+    <!-- Break if debug code is detected! -->
+    <if>
+      <not>
+        <equals arg1="${debug.lines}" arg2="" />
+      </not>
+      <then>
+        <fail message="${debug.language} debug code detected:${line.separator}
+                       ${debug.lines}" />
+      </then>
+    </if>
+  </target>
+
+<!-- #### Check an individual file for debug code
+
+No need to run `init` here. This target should only be called through parent
+`check-debug` target. -->
+  <target name="check-debug-file">
+    <echo>Checking file for debug statements: ${absfilename}</echo>
+    <loadfile property="debug.lines" file="${absfilename}">
+      <filterchain>
+        <linecontainsregexp>
+            <regexp pattern="${debug.pattern}" />
+          </linecontainsregexp>
+      </filterchain>
+    </loadfile>
+    <if>
+      <not>
+        <equals arg1="${debug.lines}" arg2="" />
+      </not>
+      <then>
+        <append text="${filename}:${line.separator}
+                      ${debug.lines}${line.separator}
+                      ${line.separator}"
+                destFile="${debug.output}"/>
+      </then>
+    </if>
+  </target>
+
+
+  <!-- ### Detect code mess
+
+Uses [PHPMD](http://phpmd.org/) to detect code mess and look for potential
+problems. -->
+  <target name="phpmd"
+          description="Generate pmd.xml using PHPMD"
+          depends="init">
+    <!-- We do not use the unusedcode ruleset as Drupal hook implementations
+         usually are declared with all arguements but may not use them
+         all. -->
+    <phpmd rulesets="codesize,naming,design">
+      <fileset refid="src.php" />
+      <formatter type="xml" outfile="${testing.artifacts}/pmd.xml"/>
+    </phpmd>
+  </target>
+
+<!-- ### Detect potential copy/pasting
+
+Uses [phpcpd](https://github.com/sebastianbergmann/phpcpd) to detect duplicate
+code. This indicates potential refactorings.-->
+  <target name="phpcpd"
+          description="Generate pmd-cpd.xml using phpcpd"
+          depends="init">
+    <phpcpd>
+      <fileset refid="src.php" />
+      <formatter type="pmd" outfile="${testing.artifacts}/pmd-cpd.xml"/>
+    </phpcpd>
+  </target>
+
+<!-- ### Generate code statistics
+
+Measures the size of the project using
+[phploc](http://sebastianbergmann.github.com/phploc/) and generates
+statistics. -->
+  <target name="phploc"
+          description="Generate phploc.csv using phploc"
+          depends="init">
+    <!-- Suffixes should be the same as included in the
+         src.php filesets -->
+    <phploc reportType="csv"
+            reportName="phploc" reportDirectory="${testing.artifacts}"
+            suffixes="php,module,inc,install,profile,test" countTests="true">
+      <fileset refid="src.php" />
+    </phploc>
+  </target>
+
+  <!-- ### Review code using PHP_CodeSniffer -->
+
+    <target name="phpcs"
+            description="Generate checkstyle.xml using PHP_CodeSniffer"
+            depends="init">
+      <exec command="phpcs --report=checkstyle
+                    --report-file=${testing.artifacts}/checkstyle-codesniffer.xml
+                    --standard=${codesniffer.sources}/ruleset.xml
+                    --extensions=php,inc
+                    --ignore=/framework/*,*/cms/*,/ssautesting/*,/*themes/*,/*build/*,/vendor/*
+                    ${project.basedir}"
+            logoutput="true" />
+    </target>
+
+  <!-- ### Generate documentation -->
+<!-- #### Generate API Documentation
+
+Uses [phpDocumentor](http://www.phpdoc.org/) to generate documentation. -->
+  <target name="phpdoc"
+          description="Generate API documentation using phpDocumentor"
+	  depends="init">
+    <mkdir dir="${testing.artifacts}/api"/>
+    <phpdoc2 title="API Documentation"
+            destdir="${testing.artifacts}/api"
+            template="responsive-twig">
+      <fileset refid="src.php" />
+    </phpdoc2>
+  </target>
+
+<!-- #### Generate a code browser
+
+Generate a code browser for PHP files with syntax highlighting and
+colored error-sections using
+[PHP_CodeBrowser](https://github.com/Mayflower/PHP_CodeBrowser). -->
+  <target name="phpcb"
+          description="Aggregate tool output with PHP_CodeBrowser"
+          depends="init">
+    <mkdir dir="${testing.artifacts}/code-browser"/>
+    <!-- There is no Phing target for PHP CodeBrowser so do a plain
+         execute. -->
+    <exec command="phpcb  --log ${testing.artifacts}
+                          --source ${project.basedir}
+                          --output ${testing.artifacts}/code-browser"
+          logoutput="true" />
+  </target>
+
+  <!-- DEPLOYMENT AND OTHER PROCESSES -->
+
+  <!-- Create a deployable package to use as the base for installing a new site FROM SCRATCH.
 	Please use the update-package target for creating a package to use for an update -->
-	<target name="package" depends="init">
-		<property name="currentpackage" value="${build.output.dir}/${package.name}" />
-		<property name="packagetype" value="deploy" />
-		<phingcall target="archive-package" />
+  <target name="package" depends="init">
+    <property name="currentpackage" value="${build.output.dir}/${package.name}" />
+    <property name="packagetype" value="deploy" />
+    <phingcall target="archive-package" />
+    <tar destfile="${build.output.dir}/${package.name}" compression="gzip">
+      <fileset dir="${project.basedir}">
+        <include name="**/**" />
+        <exclude name="silverstripe-cache/" />
+        <exclude name="sitemap.xml" />
+        <exclude name="google*.html" />
+        <exclude name="assets/**" />
+        <exclude name="build/**" />
+        <exclude name="build.xml" />
+        <exclude name="mysite/local.conf.php" />
+        <exclude name="mysite/_config/local.yml" />
+        <exclude name="mysite/db.conf.php" />
+        <exclude name="mysite/*.log" />
+        <exclude name="**/.svn/**" />
+        <exclude name="**/.git/**" />
+        <exclude name="nbproject/**" />
+        <exclude name="**/.gitignore" />
+        <exclude name=".htaccess" />
+        <exclude name="**/.project" />
+        <exclude name="**/.buildpath" />
+        <exclude name="**/.settings" />
+        <exclude name="phpunit.*" />
+        <exclude name="ssautesting/artifacts/" />
+      </fileset>
+    </tar>
+  </target>
+  <target name="gittest">
+    <echo>This thing ${git.branch}</echo>
+  </target>
 
-		<tar destfile="${build.output.dir}/${package.name}" compression="gzip">
-			<fileset dir="${project.basedir}">
-				<include name="**/**" />
-				<exclude name="silverstripe-cache/" />
-				<exclude name="sitemap.xml" />
-				<exclude name="google*.html" />
-				<exclude name="assets/**" />
-				<exclude name="build/archive/**" />
-				<exclude name="build.xml" />
-				<exclude name="mysite/local.conf.php" />
-				<exclude name="mysite/_config/local.yml" />
-				<exclude name="mysite/db.conf.php" />
-				<exclude name="mysite/*.log" />
-				<exclude name="**/.svn/**" />
-				<exclude name="**/.git/**" />
-				<exclude name="nbproject/**" />
-				<exclude name="**/.gitignore" />
-				<exclude name=".htaccess" />
-				<exclude name="**/.project" />
-				<exclude name="**/.buildpath" />
-				<exclude name="**/.settings" />
-				<exclude name="phpunit.*" />
-			</fileset>
-		</tar>
-	</target>
-
-	<target name="gittest">
-	<echo>This thing ${git.branch}</echo>
-	</target>
-
-	<!-- a package that includes all items that the phing build normally downloads, which can
+  <!-- a package that includes all items that the phing build normally downloads, which can
 	be just extracted over the top of whatever is pulled out of git. This preserves all the
 	.svn files for dependent modules etc -->
-	<target name="phing-package" depends="">
-		<property name="currentpackage" value="${build.output.dir}/${phing-package.name}" />
-		<property name="packagetype" value="development" />
-		<phingcall target="archive-package" />
+  <target name="phing-package" depends="">
+    <property name="currentpackage" value="${build.output.dir}/${phing-package.name}" />
+    <property name="packagetype" value="development" />
+    <phingcall target="archive-package" />
+    <!-- make sure we're on master... hudson kinda screws this up! -->
+    <exec command="git branch ${git.branch}" />
+    <!-- this might cause a fatal, but that's okay... -->
+    <exec command="git checkout ${git.branch}" />
+    <exec command="git pull origin ${git.branch}" />
+    <tar destfile="${build.output.dir}/${phing-package.name}" compression="gzip" defaultexcludes="false">
+      <fileset dir="${project.basedir}">
+        <include name="**/**" />
+        <exclude name="sitemap.xml" />
+        <exclude name="google*.html" />
+        <exclude name="silverstripe-cache/" />
+        <exclude name="build/archive/**" />
+        <exclude name="nbproject/**" />
+        <exclude name="**/.project" />
+        <exclude name="**/.buildpath" />
+        <exclude name="**/.settings" />
+        <exclude name="ssautesting/artifacts/" />
+      </fileset>
+    </tar>
+    <chmod file="${build.output.dir}/${phing-package.name}" mode="0664" />
+  </target>
 
-		<!-- make sure we're on master... hudson kinda screws this up! -->
-		<exec command="git branch ${git.branch}"></exec> <!-- this might cause a fatal, but that's okay... -->
-		<exec command="git checkout ${git.branch}"></exec>
-		<exec command="git pull origin ${git.branch}"></exec>
-
-		<tar destfile="${build.output.dir}/${phing-package.name}" compression="gzip" defaultexcludes="false">
-			<fileset dir="${project.basedir}">
-				<include name="**/**" />
-				<exclude name="sitemap.xml" />
-				<exclude name="google*.html" />
-				<exclude name="silverstripe-cache/" />
-				<exclude name="build/archive/**" />
-				<exclude name="nbproject/**" />
-				<exclude name="**/.project" />
-				<exclude name="**/.buildpath" />
-				<exclude name="**/.settings" />
-			</fileset>
-		</tar>
-		<chmod file="${build.output.dir}/${phing-package.name}" mode="0664" />
-	</target>
-
-	<!-- A package that doesn't include files that are commonly overridden
+  <!-- A package that doesn't include files that are commonly overridden
 	on remote sites -->
-	<target name="update-package">
-		<property name="currentpackage" value="${build.output.dir}/${update-package.name}" />
-		<property name="packagetype" value="update" />
-		<phingcall target="archive-package" />
-		
-		<tar destfile="${build.output.dir}/${update-package.name}" compression="gzip" includeemptydirs="false">
-			<fileset dir="${project.basedir}">
-				<include name="**/**" />
-				<exclude name="sitemap.xml" />
-				<exclude name="google*.html" />
-				<exclude name="mysite/db.conf.php" />
-				<exclude name="mysite/local.conf.php" />
-				<exclude name="mysite/_config/local.yml" />
-				<exclude name="mysite/*.log" />
-				<exclude name="build/**" />
-				<exclude name="build.xml" />
-				<exclude name="_ss_environment.php" />
-				<exclude name=".htaccess" />
-				<exclude name="**/.svn/**" />
-				<exclude name="nbproject/**" />
-				<exclude name="**/.project" />
-				<exclude name="**/.buildpath" />
-				<exclude name="**/.settings" />
-				<exclude name="**/.git/**" />
-				<exclude name="phpunit.*" />
-				<exclude name="assets/**" />
-				<exclude name="cms/**" />
-				<exclude name="framework/**" />
-				<exclude name="silverstripe-cache/" />
-			</fileset>
-		</tar>
-		<chmod file="${build.output.dir}/${update-package.name}" mode="0664" />
-	</target>
+  <target name="update-package">
+    <property name="currentpackage" value="${build.output.dir}/${update-package.name}" />
+    <property name="packagetype" value="update" />
+    <phingcall target="archive-package" />
+    <tar destfile="${build.output.dir}/${update-package.name}" compression="gzip" includeemptydirs="false">
+      <fileset dir="${project.basedir}">
+        <include name="**/**" />
+        <exclude name="sitemap.xml" />
+        <exclude name="google*.html" />
+        <exclude name="mysite/db.conf.php" />
+        <exclude name="mysite/local.conf.php" />
+        <exclude name="mysite/_config/local.yml" />
+        <exclude name="mysite/*.log" />
+        <exclude name="build/**" />
+        <exclude name="build.xml" />
+        <exclude name="_ss_environment.php" />
+        <exclude name=".htaccess" />
+        <exclude name="**/.svn/**" />
+        <exclude name="nbproject/**" />
+        <exclude name="**/.project" />
+        <exclude name="**/.buildpath" />
+        <exclude name="**/.settings" />
+        <exclude name="**/.git/**" />
+        <exclude name="phpunit.*" />
+        <exclude name="assets/**" />
+        <exclude name="cms/**" />
+        <exclude name="framework/**" />
+        <exclude name="silverstripe-cache/" />
+        <exclude name="ssautesting/artifacts/" />
+      </fileset>
+    </tar>
+    <chmod file="${build.output.dir}/${update-package.name}" mode="0664" />
+  </target>
+  <!-- A package that includes only the themes files -->
 
-	<!-- A package that includes only the themes files -->
-	<target name="themes-package">
-		<property name="currentpackage" value="${build.output.dir}/${themes-package.name}" />
-		<property name="packagetype" value="themes" />
-		<phingcall target="archive-package" />
+  <target name="themes-package">
+    <property name="currentpackage" value="${build.output.dir}/${themes-package.name}" />
+    <property name="packagetype" value="themes" />
+    <phingcall target="archive-package" />
+    <tar destfile="${build.output.dir}/${themes-package.name}" compression="gzip">
+      <fileset dir="${project.basedir}">
+        <include name="**/themes**" />
+      </fileset>
+    </tar>
+    <chmod file="${build.output.dir}/${themes-package.name}" mode="0664" />
+  </target>
 
-		<tar destfile="${build.output.dir}/${themes-package.name}" compression="gzip">
-			<fileset dir="${project.basedir}">
-				<include name="**/themes**" />
-			</fileset>
-		</tar>
-		<chmod file="${build.output.dir}/${themes-package.name}" mode="0664" />
-	</target>
+  <target name="package-module">
+    <property name="currentpackage" value="${module.file}" />
+    <property name="packagetype" value="module" />
+    <phingcall target="archive-package" />
+    <echo file="${module.name}/BUILD_NUMBER" append="false">Build ${BUILD_STAMP}</echo>
+    <mkdir dir="${build.output.dir}" />
+    <delete file="${module.file}" />
+    <tar destfile="${module.file}" compression="gzip">
+      <fileset dir="${project.basedir}">
+        <include name="${module.name}/**" />
+        <exclude name="**/.svn/" />
+        <exclude name="**/.git/" />
+      </fileset>
+    </tar>
+  </target>
+  <!-- Creates a backup of the existing project, including the MySQL dump -->
 
-	<target name="package-module">
-		<property name="currentpackage" value="${module.file}" />
-		<property name="packagetype" value="module" />
-		<phingcall target="archive-package" />
-
-		<echo file="${module.name}/BUILD_NUMBER" append="false">Build ${BUILD_STAMP}</echo>
-
-		<mkdir dir="${build.output.dir}" />
-		<delete file="${module.file}" />
-		<tar destfile="${module.file}" compression="gzip">
-			<fileset dir="${project.basedir}">
-				<include name="${module.name}/**" />
-				<exclude name="**/.svn/" />
-				<exclude name="**/.git/" />
-			</fileset>
-		</tar>
-	</target>
-
-	<!-- Creates a backup of the existing project, including the MySQL dump -->
-	<target name="backup">
-		<echo file="README.txt" append="false">
-To restore this backup:
+  <target name="backup">
+    <echo file="README.txt" append="false">To restore this backup:
 * Import the database file in backups/${phing.project.name}.sql
 * Copy configs/silverstripe/local.conf.php.sample to mysite/local.conf.php
 * Edit DB settings in local.conf as appropriate (typically, use MySQLDatabase as the db.type)
-* Run 'php framework/cli-script.php dev/build'
-		</echo>
-		<mkdir dir="${backup.dir}" />
-		<echo file="${backup.dir}/.htaccess" append="false">
-Deny from all
-		</echo>
-		<exec command="mysqldump -u${db.user} -p${db.pass} ${db.name} > ${backup.sql}"></exec>
-		<phingcall target="package" />
-	</target>
+* Run 'php framework/cli-script.php dev/build'</echo>
+    <mkdir dir="${backup.dir}" />
+    <echo file="${backup.dir}/.htaccess" append="false">Deny from all</echo>
+    <exec command="mysqldump -u${db.user} -p${db.pass} ${db.name} &gt; ${backup.sql}" />
+    <phingcall target="package" />
+  </target>
 
-	<target name="ci_test" depends="build">
-		<!-- lets get rid of files that we don't want tested -->
-		<delete file="${project.basedir}/framework/tests/WebserverRoutingTest.php" />
-		<phingcall target="test" />
-	</target>
-	
-	<target name="start_selenium">
-		<if>
-			<not><available file="ssautesting/selenium.jar" /></not>
-			<then>
-				<exec command="curl http://selenium-release.storage.googleapis.com/2.45/selenium-server-standalone-2.45.0.jar -o ssautesting/selenium.jar" passthru="true" />
-			</then>
-		</if>
-		<exec command="java -jar ssautesting/selenium.jar -Ddummy-config=selenium_${phing.project.name}" spawn="true" />
-	</target>
-	
-	<target name="kill_selenium">
-		<echo>Killing selenium in ${project.basedir}</echo>
-		<exec command="ps -ef | grep selenium_${phing.project.name} | grep -v grep | awk '{print $2}' | xargs kill " spawn="true" />
-	</target>
+  <target name="test_report">
+    <if>
+      <available file="${testing.arifacts}/testsuite.xml" />
+      <then>
+        <echo>Processing results</echo>
+        <delete dir="${testing.artifacts}/html/" quiet="true" />
+        <mkdir dir="${testing.artifacts}/html" />
+        <phpunitreport infile="${testing.artifacts}/testsuite.xml" format="noframes" todir="${testing.artifacts}/html" styledir="/usr/share/php/data/phing/etc/" />
+        <echo file="${testing.artifacts}/html/.htaccess" append="false">Allow from 127.0.0.1</echo>
+      </then>
+      <else>
+        <echo>No test results found</echo>
+      </else>
+    </if>
+  </target>
+  <target name="ci_test" depends="build">
+    <!-- lets get rid of files that we don't want tested -->
+    <delete file="${project.basedir}/framework/tests/WebserverRoutingTest.php" />
+    <phingcall target="test" />
+  </target>
+  <!-- Execute all the test cases -->
 
-	<target name="start_solr">
-		<echo>Executing solr in ${project.basedir}</echo>
-		<exec command="cd solr/solr &amp;&amp; java -jar -Ddummy-config=solr_${phing.project.name} start.jar" spawn="true" />
-	</target>
+  <target name="test">
+    <!-- Make sure the log directory exists -->
+    <mkdir dir="${testing.artifacts}" />
+    <mkdir dir="assets" />
+    <!-- Copy the configs - done so that we can override the reporter type from an exernal source -->
+    <copy tofile="ssautesting/testing.conf.php" file="${testing.config}" overwrite="false">
+      <filterchain>
+        <expandproperties />
+      </filterchain>
+    </copy>
+    <exec command="php framework/cli-script.php dev/build" />
+    <sstest module="${module}" testcase="${testcase}" />
+  </target>
 
-	<target name="kill_solr">
-		<echo>Killing solr in ${project.basedir}</echo>
-		<exec command="ps -ef | grep solr_${phing.project.name} | grep -v grep | awk '{print $2}' | xargs kill " spawn="true" />
-	</target>
+  <target name="archive-package">
+    <copy todir="${build.archive.dir}">
+      <fileset dir="${build.output.dir}">
+        <include name="*-${git.branch}-${packagetype}*.tar.gz" />
+      </fileset>
+    </copy>
+    <!-- delete all similar files from the output -->
+    <delete>
+      <fileset dir="${build.output.dir}">
+        <include name="*-${git.branch}-${packagetype}*.tar.gz" />
+      </fileset>
+    </delete>
+  </target>
 
-	<!-- Execute all the test cases -->
-	<target name="test">
-		<!-- Make sure the log directory exists -->
-		<mkdir dir="${testing.logdir}" />
-		<mkdir dir="assets" />
-		<!-- Copy the configs - done so that we can override the reporter type from an exernal source -->
-		<copy tofile="ssautesting/testing.conf.php" file="${testing.config}" overwrite="false">
-			<filterchain>
-				<expandproperties />
-			</filterchain>
-		</copy>
-		<exec command="php framework/cli-script.php dev/build"></exec>
-		<sstest module="${module}" testcase="${testcase}" />
-	</target>
+  <target name="deploy">
+    <if>
+      <isset property="deploy.incremental" />
+      <then>
+        <phingcall target="update-package" />
+      </then>
+      <else>
+        <phingcall target="package" />
+      </else>
+    </if>
+    <foreach list="${deploy.targets}" param="deptarget" target="deploy-target" />
+  </target>
 
-	<target name="archive-package">
-		<copy todir="${build.archive.dir}">
-			<fileset dir="${build.output.dir}">
-				<include name="*${packagetype}.${git.branch}*.tar.gz" />
-			</fileset>
-		</copy>
-		<!-- delete all similar files from the output -->
-		<delete>
-			<fileset dir="${build.output.dir}">
-				<include name="*${packagetype}.${git.branch}*.tar.gz" />	
-			</fileset>
-		</delete>
-	</target>
-	
-	<target name="deploy">
-		<if>
-			<isset property="deploy.incremental" />
-			<then>
-				<phingcall target="update-package" />
-			</then>
-			<else>
-				<phingcall target="package" />
-			</else>
-		</if>
-		<foreach list="${deploy.targets}" param="deptarget" target="deploy-target" />
-	</target>
-	
-	<target name="deploy-target">
-		<if>
-			<isset property="deploy.incremental" />
-			<then>
-				<property name="deploy.package" value="${update-package.name}" />
-			</then>
-			<else>
-				<property name="deploy.package" value="${package.name}" />
-			</else>
-		</if>
-		
-		<ssdeploy 
-			username="${deploy.${deptarget}.user}" 
-			password="${deploy.${deptarget}.pass}"
-			pubkeyfile="${deploy.${deptarget}.pubkey}"
-			privkeyfile="${deploy.${deptarget}.privkey}"
-			host="${deploy.${deptarget}.host}"
-			port="${deploy.${deptarget}.port}"
-			ignoreerrors="${deploy.first}"
-			incremental="${deploy.incremental}"
-			localpath="${build.output.dir}"
-			remotepath="${deploy.${deptarget}.path}"
-			package="${deploy.package}"
-			apachegroup="${deploy.${deptarget}.apache-group}"
-		/>
-		
-	</target>
+  <target name="deploy-target">
+    <if>
+      <isset property="deploy.incremental" />
+      <then>
+        <property name="deploy.package" value="${update-package.name}" />
+      </then>
+      <else>
+        <property name="deploy.package" value="${package.name}" />
+      </else>
+    </if>
+    <ssdeploy username="${deploy.${deptarget}.user}" password="${deploy.${deptarget}.pass}" pubkeyfile="${deploy.${deptarget}.pubkey}" privkeyfile="${deploy.${deptarget}.privkey}" host="${deploy.${deptarget}.host}" port="${deploy.${deptarget}.port}" ignoreerrors="${deploy.first}" incremental="${deploy.incremental}" localpath="${build.output.dir}" remotepath="${deploy.${deptarget}.path}" package="${deploy.package}" apachegroup="${deploy.${deptarget}.apache-group}" />
+  </target>
 
-	<target name="clean">
-		<mkdir dir="${build.output.dir}" />
-		<delete file="${database_dump.name}"></delete>
-	</target>
+  <target name="clean">
+    <mkdir dir="${build.output.dir}" />
+    <delete file="${database_dump.name}" />
+  </target>
+
 </project>
+

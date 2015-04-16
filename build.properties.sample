@@ -40,7 +40,7 @@ testing.db.name=ss_tmpdb_silverstripe_testing
 
 # Configuration details for how the output of the testing should be managed - PhingXMLPHPUnit3ResultFormatter
 testing.reporter=CliTestReporter
-testing.logdir=ssautesting/logs
+testing.artifacts=ssautesting/artifacts
 testing.logfile=testsuite.xml
 
 testcase=
@@ -101,3 +101,16 @@ deploy.stage.apache-group=www-data
 # deploy.prod.user=deploy
 # deploy.prod.pass=deploy
 # deploy.prod.path=/home/deploy/prod/${phing.project.name}
+
+
+# Validation tools and their associated bits
+
+csslint.binary=/usr/bin/csslint
+csslint.rules=
+
+jslint.binary=/usr/bin/jslint
+jshint.binary=/usr/bin/jshint
+standary.binary=/usr/bin/standard
+codesniffer.sources=ssautesting/validation/codesniffer/SilverStripe
+
+
