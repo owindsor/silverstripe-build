@@ -514,16 +514,6 @@ them in comments as well. -->
     </foreach>
 
     <loadfile property="debug.lines" file="${debug.output}" />
-    <!-- Break if debug code is detected! -->
-    <if>
-      <not>
-        <equals arg1="${debug.lines}" arg2="" />
-      </not>
-      <then>
-        <fail message="${debug.language} debug code detected:${line.separator}
-                       ${debug.lines}" />
-      </then>
-    </if>
   </target>
 
 <!-- #### Check an individual file for debug code
